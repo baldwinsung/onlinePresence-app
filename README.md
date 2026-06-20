@@ -1,25 +1,48 @@
-# onlinePresence - app
+# onlinePresence-app
 
-Figure out the online presence for a company or academic institution via put methods.
-
-Displays general information about the domain and SSL certificate.
-
-Pay close attention to the expiration dates for both the domain and SSL certificates.
+Flask REST API to look up the online presence of a domain — WHOIS registration, hosting provider, and SSL certificate details — all via HTTP PUT endpoints.
 
 ## Getting Started
 
-Container or Flask
+### Docker (recommended)
 
-### Container
-
-Build and run the container
-```
-docker buildx build -t app .
-docker run --name test -p 8000:5000 app
+```bash
+docker buildx build -t onlinepresence-app .
+docker run --name op-app -p 8000:5000 onlinepresence-app
 ```
 
-Test with google.
+### Local (Flask)
+
+```bash
+mkvirtualenv onlinePresence-app
+pip install -r requirements.txt
+flask run
 ```
+
+List available routes:
+```bash
+flask routes
+```
+
+## API Reference
+
+All endpoints use `PUT`. Replace `<domain>` with a domain name (e.g. `google.com`).
+
+| Endpoint | Description |
+|---|---|
+| `PUT /domainwhois_registrar/<domain>` | Domain registrar |
+| `PUT /domainwhois_created/<domain>` | Domain registration date |
+| `PUT /domainwhois_expires/<domain>` | Domain expiration date |
+| `PUT /hostingprovider/<domain>` | Hosting provider (via IP RDAP lookup) |
+| `PUT /sslcertificate_subject/<domain>` | SSL certificate subject (CN) |
+| `PUT /sslcertificate_issuer/<domain>` | SSL certificate issuer (O) |
+| `PUT /sslcertificate_notbefore/<domain>` | SSL valid-from date |
+| `PUT /sslcertificate_notafter/<domain>` | SSL expiry date |
+| `PUT /sslcertificate_san/<domain>` | Subject Alternative Names (sorted) |
+
+## Examples
+
+```bash
 curl -X PUT http://localhost:8000/domainwhois_registrar/google.com
 "MarkMonitor, Inc."
 
@@ -38,37 +61,10 @@ curl -X PUT http://localhost:8000/sslcertificate_issuer/google.com
 curl -X PUT http://localhost:8000/sslcertificate_notafter/google.com
 "Mon, 29 Jul 2024 13:42:08 GMT"
 
-curl -X PUT http://localhost:8000/sslcertificate_notbefore/google.com
-"Mon, 06 May 2024 13:42:09 GMT"
-
 curl -X PUT http://localhost:8000/sslcertificate_san/meta.com
 [" DNS:meta.com","DNS:*.meta.com"]
 ```
 
-### Running Flask locally
+## Credits
 
-Install the dependencies. Use a virtual environment. Run Flask.
-
-```
-mkvirtualenv onlinePresence-app
-pip install -r requirements.txt
-flask run
-```
-
-Get a list of route endpoints
-```
-flask routes
-```
-
-Test the code with google.
-```
-curl -X PUT http://localhost:5000/domainwhois_registrar/google.com
-"MarkMonitor, Inc."
-
-curl -s -X PUT http://localhost:5000/sslcertificate_san/google.com | jq . | wc -l  
-138
-```
-
-# Credits
-
-Richard Penman ( https://github.com/richardpenman ) for python-whois
+[Richard Penman](https://github.com/richardpenman) for python-whois
