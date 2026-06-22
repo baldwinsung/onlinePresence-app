@@ -9,108 +9,126 @@ from ipwhois import IPWhois
 app = Flask(__name__)
 
 
+def _load_ssl_cert(domain):
+    c = ssl.get_server_certificate((domain, 443), timeout=5)
+    return OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, c)
+
+
+def _error(msg, status=400):
+    return jsonify({"error": msg}), status
+
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
+
+
 @app.route('/', methods=['GET'])
 def main_page():
-    x = "main page, enter the target path"
-    return jsonify(x)
+    return jsonify("main page, enter the target path")
 
 
 @app.route('/domainwhois_registrar/<domain>', methods=['PUT'])
 def domainWhois_registrar(domain):
-    w = whois.whois(domain)
-    return jsonify(w.registrar)
+    try:
+        w = whois.whois(domain)
+        return jsonify(w.registrar)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/domainwhois_created/<domain>', methods=['PUT'])
 def domainWhois_created(domain):
-    w = whois.whois(domain)
-    if type(w.creation_date) is list:
-        return jsonify(w.creation_date[0])
-    else:
-        return jsonify(w.creation_date)
+    try:
+        w = whois.whois(domain)
+        date = w.creation_date[0] if isinstance(w.creation_date, list) else w.creation_date
+        return jsonify(date)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/domainwhois_expires/<domain>', methods=['PUT'])
 def domainWhois_expires(domain):
-    w = whois.whois(domain)
-    if type(w.expiration_date) is list:
-        return jsonify(w.expiration_date[0])
-    else:
-        return jsonify(w.expiration_date)
+    try:
+        w = whois.whois(domain)
+        date = w.expiration_date[0] if isinstance(w.expiration_date, list) else w.expiration_date
+        return jsonify(date)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/hostingprovider/<domain>', methods=['PUT'])
 def hostingProvider(domain):
-    result = dns.resolver.resolve(domain, 'A')
-    for ipval in result:
-        print('IP', ipval.to_text())
-        ip_apex = ipval.to_text()
-
-        if ip_apex:
-            print("A aka APEX Record:", ip_apex)
-            lookup = IPWhois(ip_apex)
-            p = lookup.lookup_rdap()
-            if p['objects'] is not None:
-                for x in p['objects']:
-                    hosting_provider = p['objects'][x]['contact']['name']
-                    print("Hosting Provider: ", hosting_provider)
-                    return jsonify(hosting_provider)
+    try:
+        result = dns.resolver.resolve(domain, 'A')
+        ips = [r.to_text() for r in result]
+        if not ips:
+            return _error("No A record found", 404)
+        lookup = IPWhois(ips[0])
+        p = lookup.lookup_rdap()
+        if p['objects']:
+            for x in p['objects']:
+                name = p['objects'][x]['contact']['name']
+                return jsonify(name)
+        return _error("Hosting provider not found", 404)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/sslcertificate_subject/<domain>', methods=['PUT'])
 def sslCertificate_subject(domain):
-    c = ssl.get_server_certificate((domain, 443), timeout=5)
-    x = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, c)
-    cn = x.get_subject()
-    cn_str = "".join("/{:s}={:s}".format(name.decode(), value.decode())
-                     for name, value in cn.get_components())
-
-    return jsonify(cn_str.split('/')[1])
+    try:
+        x = _load_ssl_cert(domain)
+        cn = x.get_subject()
+        cn_str = "".join(f"/{name.decode()}={value.decode()}" for name, value in cn.get_components())
+        return jsonify(cn_str.split('/')[1])
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/sslcertificate_issuer/<domain>', methods=['PUT'])
 def sslCertificate_issuer(domain):
-    c = ssl.get_server_certificate((domain, 443), timeout=5)
-    x = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, c)
-    ir = x.get_issuer()
-    ir_str = "".join("/{:s}={:s}".format(name.decode(), value.decode())
-                     for name, value in ir.get_components())
-
-    return jsonify(ir_str.split('/')[2])
+    try:
+        x = _load_ssl_cert(domain)
+        ir = x.get_issuer()
+        ir_str = "".join(f"/{name.decode()}={value.decode()}" for name, value in ir.get_components())
+        return jsonify(ir_str.split('/')[2])
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/sslcertificate_notbefore/<domain>', methods=['PUT'])
 def sslCertificate_notbefore(domain):
-    c = ssl.get_server_certificate((domain, 443), timeout=5)
-    x = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, c)
-    nb = datetime.strptime(x.get_notBefore().decode('ascii'), '%Y%m%d%H%M%SZ')
-
-    return jsonify(nb)
+    try:
+        x = _load_ssl_cert(domain)
+        nb = datetime.strptime(x.get_notBefore().decode('ascii'), '%Y%m%d%H%M%SZ')
+        return jsonify(nb)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/sslcertificate_notafter/<domain>', methods=['PUT'])
 def sslCertificate_notafter(domain):
-    c = ssl.get_server_certificate((domain, 443), timeout=5)
-    x = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, c)
-    na = datetime.strptime(x.get_notAfter().decode('ascii'), '%Y%m%d%H%M%SZ')
-
-    return jsonify(na)
+    try:
+        x = _load_ssl_cert(domain)
+        na = datetime.strptime(x.get_notAfter().decode('ascii'), '%Y%m%d%H%M%SZ')
+        return jsonify(na)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 @app.route('/sslcertificate_san/<domain>', methods=['PUT'])
 def sslCertificate_san(domain):
-    c = ssl.get_server_certificate((domain, 443), timeout=5)
-    x = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, c)
-
-    ec = x.get_extension_count()
-    for i in range(0, ec):
-        ge = x.get_extension(i)
-        if 'subjectAltName' in str(ge.get_short_name()):
-            s = ge.__str__()
-            s = s.split(',')
-            s.sort()
-
-            return jsonify(s)
+    try:
+        x = _load_ssl_cert(domain)
+        ec = x.get_extension_count()
+        for i in range(ec):
+            ge = x.get_extension(i)
+            if 'subjectAltName' in str(ge.get_short_name()):
+                return jsonify(sorted(ge.__str__().split(',')))
+        return _error("No SAN extension found", 404)
+    except Exception as e:
+        return _error(str(e), 502)
 
 
 if __name__ == '__main__':
