@@ -31,6 +31,10 @@ Package.resolved
 *.tfstate
 *.tfstate.*
 
+# Python
+__pycache__/
+*.pyc
+
 # Editors
 .vscode/
 *.swp
