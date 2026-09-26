@@ -70,22 +70,28 @@ curl -X PUT http://localhost:8000/sslcertificate_san/meta.com
 Live at `op.baldwinsung.com`, publicly accessible (no auth — this is a
 public lookup API, unlike the private apps in this fleet). Runs as 1
 replica on each of 3 independent VPS (NY, LA, Taipei — see
-`personal_vps`), each its own single-node k3s cluster, fronted by one
-Cloudflare Tunnel whose token is shared by all 3 `cloudflared`
-Deployments — Cloudflare's edge auto-routes to whichever replica(s) are
-healthy. No database, no persistent volume, no per-app secret beyond
-`cloudflared`'s own tunnel token — every endpoint is a live outbound
-network call, so there's nothing to keep in sync between replicas.
+`personal_vps`), each its own single-node k3s cluster. No database, no
+persistent volume, no secrets of its own at all — every endpoint is a
+live outbound network call, so there's nothing to keep in sync between
+replicas and nothing app-specific to configure.
 
 ```bash
 # One-time per VPS, after the image is built+imported (see below):
-kubectl apply -f deploy/k8s/vps/namespace.yaml -f deploy/k8s/vps/app.yaml -f deploy/k8s/vps/cloudflared.yaml
+kubectl apply -f deploy/k8s/vps/namespace.yaml -f deploy/k8s/vps/app.yaml
 ```
 
-`deploy/k8s/vps/secret.example.yaml` is the template for the `cloudflared`
-Secret (`tunnel-token`, from `terraform output -raw
-onlinepresence_vps_tunnel_token` in `baldwinsung_cloudflare/zerotrust`) —
-copy to `secret.yaml` (gitignored) and apply first.
+Routing is one `ingress_rule` in `baldwinsung_cloudflare/zerotrust/tunnel.tf`'s
+shared `vps_shared` Cloudflare Tunnel (`op.baldwinsung.com` →
+`onlinepresence-app.onlinepresence-app.svc.cluster.local:5000`), fronted
+by `personal_vps`'s single shared `cloudflared` Deployment per VPS
+(`personal_vps/deploy/k8s/cloudflared-shared/`) — **not** a dedicated
+tunnel/Deployment of this app's own. This app briefly had one (created
+alongside the VPS migration, 2026-09-26), then it was folded into the
+shared tunnel the same day after 8 separate per-app cloudflared processes
+were found driving a multi-hour crash-loop incident on the LA VPS — see
+`personal_vps/CLAUDE.md`'s "Shared cloudflared" section for the full
+story. Adding this (or any) app to the fleet now means adding an
+`ingress_rule` to `vps_shared`'s config, not standing up a new tunnel.
 
 No CI is wired up yet — the image is built manually with `podman build`
 (or `docker buildx`) and distributed to each VPS with `k3s ctr images
