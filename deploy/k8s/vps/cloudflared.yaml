@@ -1,0 +1,36 @@
+# One cloudflared replica per VPS (replicas: 1 here — the redundancy comes
+# from 3 of these, one per VPS's independent k3s, all sharing the same
+# tunnel token from baldwinsung_cloudflare/zerotrust's onlinepresence_vps
+# tunnel). No Cloudflare Access here — op.baldwinsung.com is a public,
+# unauthenticated lookup API (matches its pre-existing nginx vhost, which
+# had no auth layer either), unlike the Access-gated personal_* apps.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: onlinepresence-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --autoupdate-freq
+            - 87600h
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared
+                  key: tunnel-token

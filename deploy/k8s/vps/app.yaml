@@ -1,0 +1,49 @@
+# Replaces the old podman+containerd+systemd deployment (personal_vps's
+# post/onlinepresence-app.yml, LA-only, no redundancy) with the same
+# 3-VPS k3s + shared Cloudflare Tunnel pattern used by every other app in
+# the fleet. Stateless (no database, no persistent volume, no secrets) --
+# every lookup is a live outbound network call (WHOIS/DNS/SSL), so there's
+# nothing to sync between replicas.
+apiVersion: v1
+kind: Service
+metadata:
+  name: onlinepresence-app
+  namespace: onlinepresence-app
+spec:
+  selector:
+    app: onlinepresence-app
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onlinepresence-app
+  namespace: onlinepresence-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: onlinepresence-app
+  template:
+    metadata:
+      labels:
+        app: onlinepresence-app
+    spec:
+      containers:
+        - name: onlinepresence-app
+          # podman (not docker buildx, since only LA has a builder) tags
+          # this localhost/... by default rather than docker.io/library/...
+          image: localhost/onlinepresence-app:vps-latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000

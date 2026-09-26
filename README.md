@@ -65,6 +65,35 @@ curl -X PUT http://localhost:8000/sslcertificate_san/meta.com
 [" DNS:meta.com","DNS:*.meta.com"]
 ```
 
+## Deployment
+
+Live at `op.baldwinsung.com`, publicly accessible (no auth — this is a
+public lookup API, unlike the private apps in this fleet). Runs as 1
+replica on each of 3 independent VPS (NY, LA, Taipei — see
+`personal_vps`), each its own single-node k3s cluster, fronted by one
+Cloudflare Tunnel whose token is shared by all 3 `cloudflared`
+Deployments — Cloudflare's edge auto-routes to whichever replica(s) are
+healthy. No database, no persistent volume, no per-app secret beyond
+`cloudflared`'s own tunnel token — every endpoint is a live outbound
+network call, so there's nothing to keep in sync between replicas.
+
+```bash
+# One-time per VPS, after the image is built+imported (see below):
+kubectl apply -f deploy/k8s/vps/namespace.yaml -f deploy/k8s/vps/app.yaml -f deploy/k8s/vps/cloudflared.yaml
+```
+
+`deploy/k8s/vps/secret.example.yaml` is the template for the `cloudflared`
+Secret (`tunnel-token`, from `terraform output -raw
+onlinepresence_vps_tunnel_token` in `baldwinsung_cloudflare/zerotrust`) —
+copy to `secret.yaml` (gitignored) and apply first.
+
+No CI is wired up yet — the image is built manually with `podman build`
+(or `docker buildx`) and distributed to each VPS with `k3s ctr images
+import`, matching `imagePullPolicy: Never` in `app.yaml`. Migrated
+2026-09-26 off an old single-point deployment (podman + a separate system
+containerd + a systemd unit, LA only, no redundancy) that predated this
+fleet pattern.
+
 ## Credits
 
 [Richard Penman](https://github.com/richardpenman) for python-whois
