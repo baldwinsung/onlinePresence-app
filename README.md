@@ -1,27 +1,23 @@
 # onlinePresence-app
 
-Flask REST API to look up the online presence of a domain — WHOIS registration, hosting provider, and SSL certificate details — all via HTTP PUT endpoints.
+Go REST API to look up the online presence of a domain — WHOIS registration, hosting provider, and SSL certificate details — all via HTTP PUT endpoints. (A Flask app until 2026-10-23; same routes and JSON.)
 
 ## Getting Started
 
-### Docker (recommended)
+### Local
 
 ```bash
+go test ./...
+go build -o bin/onlinepresence-server ./cmd/onlinepresence-server
+LISTEN_ADDR=:8000 bin/onlinepresence-server serve
+```
+
+### Docker
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/onlinepresence-server ./cmd/onlinepresence-server
 docker buildx build -t onlinepresence-app .
-docker run --name op-app -p 8000:5000 onlinepresence-app
-```
-
-### Local (Flask)
-
-```bash
-mkvirtualenv onlinePresence-app
-pip install -r requirements.txt
-flask run
-```
-
-List available routes:
-```bash
-flask routes
+docker run --name op-app -p 8000:8080 onlinepresence-app
 ```
 
 ## API Reference
@@ -44,7 +40,7 @@ All endpoints use `PUT`. Replace `<domain>` with a domain name (e.g. `google.com
 
 ```bash
 curl -X PUT http://localhost:8000/domainwhois_registrar/google.com
-"MarkMonitor, Inc."
+"MarkMonitor Inc."
 
 curl -X PUT http://localhost:8000/domainwhois_created/google.com
 "Mon, 15 Sep 1997 04:00:00 GMT"
@@ -56,14 +52,28 @@ curl -X PUT http://localhost:8000/sslcertificate_subject/google.com
 "CN=*.google.com"
 
 curl -X PUT http://localhost:8000/sslcertificate_issuer/google.com
-"O=Google Trust Services LLC"
+"O=Google Trust Services"
 
 curl -X PUT http://localhost:8000/sslcertificate_notafter/google.com
 "Mon, 29 Jul 2024 13:42:08 GMT"
 
 curl -X PUT http://localhost:8000/sslcertificate_san/meta.com
-[" DNS:meta.com","DNS:*.meta.com"]
+["DNS:*.meta.com","DNS:meta.com"]
 ```
+
+### Differences from the Flask version (2026-10-23)
+
+- `sslcertificate_subject` / `_issuer` return the `CN=` / `O=` attribute.
+  Flask returned a fixed position in the DN, so certificates whose subject
+  starts with the country (DigiCert's, e.g. meta.com) gave `"C=US"`.
+- `sslcertificate_san` works again (it returned 502 for every domain under
+  pyOpenSSL 26) and no longer has a stray leading space on all but the
+  first entry.
+- WHOIS comes from `likexian/whois` + `whois-parser`, which takes the
+  registry's registrar name (`"MarkMonitor Inc."`) where python-whois took
+  the registrar's own (`"MarkMonitor, Inc."`).
+- Errors are always JSON (`{"error": ...}`); unknown routes and wrong
+  methods return Go's plain-text 404/405 instead of Flask's HTML pages.
 
 ## Deployment
 
@@ -93,13 +103,18 @@ were found driving a multi-hour crash-loop incident on the LA VPS — see
 story. Adding this (or any) app to the fleet now means adding an
 `ingress_rule` to `vps_shared`'s config, not standing up a new tunnel.
 
-No CI is wired up yet — the image is built manually with `podman build`
-(or `docker buildx`) and distributed to each VPS with `k3s ctr images
-import`, matching `imagePullPolicy: Never` in `app.yaml`. Migrated
+No CI is wired up yet — build the binary (see Getting Started), then the
+image with `docker buildx build -t localhost/onlinepresence-app:vps-latest
+--load .` and distribute it to each VPS with `docker save` + `k3s ctr -n
+k8s.io images import`, matching `imagePullPolicy: Never` in `app.yaml`.
+The container listens on 8080; the Service keeps port 5000 so the tunnel
+rule is unchanged. Migrated
 2026-09-26 off an old single-point deployment (podman + a separate system
 containerd + a systemd unit, LA only, no redundancy) that predated this
 fleet pattern.
 
 ## Credits
 
-[Richard Penman](https://github.com/richardpenman) for python-whois
+[Richard Penman](https://github.com/richardpenman) for python-whois (used
+until 2026-10-23), [Li Kexian](https://github.com/likexian) for
+`whois` and `whois-parser`

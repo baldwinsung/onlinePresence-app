@@ -14,7 +14,7 @@ spec:
     app: onlinepresence-app
   ports:
     - port: 5000
-      targetPort: 5000
+      targetPort: 8080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -33,17 +33,23 @@ spec:
     spec:
       containers:
         - name: onlinepresence-app
-          # podman (not docker buildx, since only LA has a builder) tags
-          # this localhost/... by default rather than docker.io/library/...
+          # Go binary since 2026-10-23 (Flask before). Service port stays
+          # 5000 so the vps_shared tunnel ingress rule is unchanged.
           image: localhost/onlinepresence-app:vps-latest
           imagePullPolicy: Never
           ports:
-            - containerPort: 5000
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              memory: 64Mi
           readinessProbe:
             httpGet:
               path: /health
-              port: 5000
+              port: 8080
           livenessProbe:
             httpGet:
               path: /health
-              port: 5000
+              port: 8080
