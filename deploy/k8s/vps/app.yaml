@@ -49,7 +49,9 @@ spec:
             httpGet:
               path: /health
               port: 8080
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
+            timeoutSeconds: 5
